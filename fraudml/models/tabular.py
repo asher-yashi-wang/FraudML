@@ -22,6 +22,9 @@ class TabularFraudModel:
     def predict_proba(self, X):
         if self.pipeline is None: raise RuntimeError("Model is not fitted")
         return self.pipeline.predict_proba(X)[:, 1]
-    def save(self, path): joblib.dump(self, Path(path))
+    def save(self, path):
+        target = Path(path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        joblib.dump(self, target)
     @classmethod
     def load(cls, path): return joblib.load(Path(path))

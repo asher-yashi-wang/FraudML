@@ -14,6 +14,7 @@ from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from .data import validate_timestamps
 
 DEFAULT_MAX_CARDINALITY = 32
 
@@ -21,8 +22,8 @@ DEFAULT_MAX_CARDINALITY = 32
 def as_categorical(frame: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
     """Treat integer-coded entity proxies as categories, not magnitudes.
 
-    IEEE-CIS stores fields like ``card1``, ``addr1``, and ``D1`` as integer
-    codes: their numeric order is meaningless. Converting them to strings
+    IEEE-CIS stores fields like ``card1`` and ``addr1`` as numeric codes
+    whose order is meaningless. Converting them to strings
     routes them to the categorical branch of ``build_preprocessor`` (one-hot
     for low cardinality, frequency encoding for high), which is usually much
     stronger for logistic regression than standardizing raw codes. Missing
@@ -36,6 +37,9 @@ def as_categorical(frame: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
             # raises on pd.NA comparisons, so mask with np.nan after str()
             # instead of relying on a string dtype.
             s = out[col].astype(str)
+            if pd.api.types.is_float_dtype(out[col]):
+                # CSV inference may switch an integer code to float when nulls appear.
+                s = s.str.replace(r"^(-?\d+)\.0$", r"\1", regex=True)
             out[col] = s.where(out[col].notna(), np.nan).astype(object)
     return out
 
@@ -55,7 +59,8 @@ class FrequencyEncoder(BaseEstimator, TransformerMixin):
         frame = pd.DataFrame(X)
         self.maps_ = {}
         for col in frame.columns:
-            self.maps_[col] = frame[col].astype("string").value_counts(dropna=False, normalize=True)
+            counts = frame[col].astype("string").value_counts(dropna=True)
+            self.maps_[col] = counts / len(frame)
         return self
 
     def transform(self, X):
@@ -103,17 +108,23 @@ def add_past_entity_stats(df: pd.DataFrame, entity_cols: list[str],
                           time_col="TransactionDT", amount_col="TransactionAmt") -> pd.DataFrame:
     """Features for each row use strictly earlier transactions only.
 
-    Vectorized: past count is a group cumcount, past amount mean is a shifted
-    group cumsum divided by that count, which scales to the full dataset
-    (the previous per-group expanding mean was quadratic-ish in practice).
+    Rows with equal timestamps share the same history. The mean uses only
+    historical rows with a known amount, while the count includes every
+    historical transaction for the entity.
     """
+    validate_timestamps(df, time_col)
     out = df.sort_values(time_col, kind="stable").reset_index(drop=True).copy()
     for col in entity_cols:
         if col not in out:
             continue
-        group_amounts = out.groupby(col, dropna=False, sort=False)[amount_col]
-        past_count = group_amounts.cumcount()
-        past_sum = group_amounts.shift().fillna(0.0).groupby(out[col], dropna=False, sort=False).cumsum()
-        out[f"{col}__past_count"] = past_count
-        out[f"{col}__past_amount_mean"] = past_sum / past_count.replace(0, np.nan)
+        grouped = out.groupby([col, time_col], dropna=False, sort=False, observed=True)
+        # The sorted input makes buckets appear in chronological order within
+        # each entity. Using bucket IDs avoids a full-frame merge per feature.
+        buckets = grouped[amount_col].agg(["size", "sum", "count"])
+        totals = buckets.groupby(level=0, dropna=False, sort=False, observed=True).cumsum()
+        previous = totals.groupby(level=0, dropna=False, sort=False, observed=True).shift(fill_value=0)
+        bucket_ids = grouped.ngroup().to_numpy()
+        out[f"{col}__past_count"] = previous["size"].to_numpy()[bucket_ids]
+        past_mean = previous["sum"] / previous["count"].replace(0, np.nan)
+        out[f"{col}__past_amount_mean"] = past_mean.to_numpy()[bucket_ids]
     return out

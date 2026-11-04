@@ -39,7 +39,7 @@ For LightGBM: `pip install -e '.[lightgbm,dev]'` and use `--model lightgbm`. The
 | `fraudml/graph/` | optional causal transaction–entity GraphSAGE building blocks |
 | `fraudml/decision.py` | risk ranking and Top-K investigation policy |
 | `fraudml/policy.py`, `fraudml/workflow.py` | versioned policy, triage, review queue, audit events |
-| `scripts/run_experiment.py` | one-shot final evaluation on the holdout test split |
+| `scripts/run_experiment.py` | validation comparisons and explicit final holdout evaluation |
 | `docs/` | data, architecture, experiments, usage, proposal and report templates |
 
 ## Data availability and restrictions
@@ -53,3 +53,5 @@ The baseline uses time-contiguous splits, fits preprocessing only on training da
 ## Reproducibility
 
 Set a seed, save the exact config/environment and model artifact per run. Report PR-AUC and capacity-constrained Recall@K/Precision@K along with random and amount-ranking baselines. See `docs/experiments.md`.
+
+Models saved by the experiment script remember their category and history settings. For batch scoring, `fraudml predict` derives history from earlier rows in the scoring CSV. Supply `--history earlier_transactions.csv` when that CSV starts after the available history. All rows in the history file must precede the scoring batch. Use `--identity` and `--history-identity` for the corresponding identity joins if those features were used during training.

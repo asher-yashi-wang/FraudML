@@ -5,10 +5,12 @@ def build_causal_bipartite_edges(frame, entity_cols, time_col="TransactionDT"):
     """Return transaction--entity edge table; caller must construct each split without future rows.
     Entity node IDs are namespaced by column to prevent collisions.
 
-    ``transaction_index`` is the POSITIONAL row index (0..n-1) of the returned
-    time-sorted frame, not the caller's original index. Build node features on
-    ``frame.sort_values(time_col).reset_index(drop=True)`` so edge indices line
-    up with the feature matrix.
+    ``transaction_index`` is the positional row index (0..n-1) in the
+    time-sorted transaction frame. Build node features on
+    ``frame.sort_values(time_col, kind="stable").reset_index(drop=True)``
+    so the feature matrix preserves the same order for tied timestamps.
+    Edges within each supplied frame have no temporal filtering. Use only a
+    history snapshot plus the target transaction when scoring a target.
     """
     import pandas as pd
     ordered = frame.sort_values(time_col, kind="stable").reset_index(drop=True).copy()

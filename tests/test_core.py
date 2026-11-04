@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 from fraudml.data import chronological_split, feature_columns
 from fraudml.features import FrequencyEncoder, add_past_entity_stats, as_categorical
+from fraudml.graph.sage import build_causal_bipartite_edges
 from fraudml.metrics import top_k_metrics
 from fraudml.models import TabularFraudModel
 from fraudml.synthetic import make_synthetic_transactions
@@ -30,7 +31,7 @@ def test_logistic_fit_and_probability():
     assert len(p)==len(s.test) and np.all((p>=0)&(p<=1))
 
 def test_frequency_encoder_unseen_and_missing_map_to_zero():
-    enc=FrequencyEncoder().fit(pd.DataFrame({"c":["a","a","b","c"]}))
+    enc=FrequencyEncoder().fit(pd.DataFrame({"c":["a","a","b",None]}))
     out=enc.transform(pd.DataFrame({"c":["a","zzz",None]}))
     assert out.iloc[0,0]==0.5 and out.iloc[1,0]==0.0 and out.iloc[2,0]==0.0
 
@@ -57,6 +58,27 @@ def test_past_entity_stats_match_naive_reference():
         got_mean=out[f"{col}__past_amount_mean"].to_numpy()
         assert np.array_equal(got_count,naive_count)
         assert np.allclose(got_mean,naive_mean,equal_nan=True)
+
+def test_past_entity_stats_exclude_same_timestamp_and_missing_amounts():
+    transactions = pd.DataFrame({
+        "TransactionDT": [12, 10, 11, 10, 11, 12],
+        "TransactionAmt": [400, 100, 300, np.nan, 900, 500],
+        "card1": ["A", "A", "A", "A", "B", "B"],
+    })
+    stats = add_past_entity_stats(transactions, ["card1"])
+    assert stats["card1__past_count"].tolist() == [0, 0, 2, 0, 3, 1]
+    np.testing.assert_allclose(
+        stats["card1__past_amount_mean"], [np.nan, np.nan, 100, np.nan, 200, 900],
+        equal_nan=True,
+    )
+
+def test_graph_edges_use_stable_local_transaction_indices():
+    transactions = pd.DataFrame({
+        "TransactionDT": [12, 10, 10], "card1": ["C", "B", "A"],
+    }, index=[91, 18, 24])
+    edges = build_causal_bipartite_edges(transactions, ["card1"])
+    assert edges["transaction_index"].tolist() == [0, 1, 2]
+    assert edges["entity_key"].tolist() == ["card1:B", "card1:A", "card1:C"]
 
 def test_policy_triage_keeps_confirmation_for_human_review():
     df=make_synthetic_transactions(3); df["risk_score"]=[.1,.5,.95]
