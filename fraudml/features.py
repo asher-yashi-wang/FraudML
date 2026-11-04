@@ -18,6 +18,28 @@ from sklearn.preprocessing import OneHotEncoder, StandardScaler
 DEFAULT_MAX_CARDINALITY = 32
 
 
+def as_categorical(frame: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
+    """Treat integer-coded entity proxies as categories, not magnitudes.
+
+    IEEE-CIS stores fields like ``card1``, ``addr1``, and ``D1`` as integer
+    codes: their numeric order is meaningless. Converting them to strings
+    routes them to the categorical branch of ``build_preprocessor`` (one-hot
+    for low cardinality, frequency encoding for high), which is usually much
+    stronger for logistic regression than standardizing raw codes. Missing
+    values are preserved.
+    """
+    out = frame.copy()
+    for col in cols:
+        if col in out:
+            # Plain str + np.nan in an object column. pandas StringDtype keeps
+            # pd.NA through .astype(object), and sklearn's SimpleImputer
+            # raises on pd.NA comparisons, so mask with np.nan after str()
+            # instead of relying on a string dtype.
+            s = out[col].astype(str)
+            out[col] = s.where(out[col].notna(), np.nan).astype(object)
+    return out
+
+
 class FrequencyEncoder(BaseEstimator, TransformerMixin):
     """Target-agnostic frequency encoding fitted on train only.
 

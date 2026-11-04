@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 from fraudml.data import chronological_split, feature_columns
-from fraudml.features import FrequencyEncoder, add_past_entity_stats
+from fraudml.features import FrequencyEncoder, add_past_entity_stats, as_categorical
 from fraudml.metrics import top_k_metrics
 from fraudml.models import TabularFraudModel
 from fraudml.synthetic import make_synthetic_transactions
@@ -33,6 +33,17 @@ def test_frequency_encoder_unseen_and_missing_map_to_zero():
     enc=FrequencyEncoder().fit(pd.DataFrame({"c":["a","a","b","c"]}))
     out=enc.transform(pd.DataFrame({"c":["a","zzz",None]}))
     assert out.iloc[0,0]==0.5 and out.iloc[1,0]==0.0 and out.iloc[2,0]==0.0
+
+def test_as_categorical_uses_nan_not_pd_na():
+    df=make_synthetic_transactions(8)
+    df.loc[0,"card1"]=np.nan
+    out=as_categorical(df, ["card1"])
+    assert out["card1"].dtype==object
+    assert not out["card1"].apply(lambda v: v is pd.NA).any()
+    assert pd.isna(out["card1"].iloc[0])
+    # sklearn SimpleImputer must accept the result (this raised with pd.NA)
+    from sklearn.impute import SimpleImputer
+    SimpleImputer(strategy="most_frequent").fit(out[["card1"]])
 
 def test_past_entity_stats_match_naive_reference():
     df=make_synthetic_transactions(120)

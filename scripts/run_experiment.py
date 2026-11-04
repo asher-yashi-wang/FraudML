@@ -29,7 +29,7 @@ import pandas as pd
 
 from fraudml.data import chronological_split, feature_columns, load_ieee_cis
 from fraudml.decision import amount_baseline, random_baseline
-from fraudml.features import add_past_entity_stats
+from fraudml.features import add_past_entity_stats, as_categorical
 from fraudml.metrics import evaluate
 from fraudml.models import TabularFraudModel
 
@@ -43,6 +43,9 @@ def main() -> int:
                     help="optional path to train_identity.csv")
     ap.add_argument("--entity-cols", nargs="*", default=[],
                     help="entity proxy columns for strictly-past stats (ablation: rerun without)")
+    ap.add_argument("--categorical-codes", nargs="*", default=[],
+                    help="integer-coded entity columns to treat as categorical, e.g. "
+                         "card1 card2 card5 card6 addr1 addr2 D1 D4 D6 D8 D10 D11 D12 D15 id_30 id_31 id_33")
     ap.add_argument("--k", nargs="+", type=int, default=[100, 500],
                     help="review-budget sizes to evaluate")
     ap.add_argument("--models", nargs="+", default=["random", "amount", "logistic", "lightgbm"],
@@ -54,6 +57,8 @@ def main() -> int:
     args = ap.parse_args()
 
     df = load_ieee_cis(args.transaction, args.identity)
+    if args.categorical_codes:
+        df = as_categorical(df, args.categorical_codes)
     # Strictly-past aggregates are safe to compute before splitting: because
     # the splits are chronological, every row only ever sees earlier rows,
     # which is exactly what would be known at its prediction time.
@@ -105,6 +110,7 @@ def main() -> int:
         "transaction_file": args.transaction,
         "identity_file": args.identity,
         "entity_cols": args.entity_cols,
+        "categorical_codes": args.categorical_codes,
         "split": {
             "train_fraction": args.train_fraction,
             "valid_fraction": args.valid_fraction,

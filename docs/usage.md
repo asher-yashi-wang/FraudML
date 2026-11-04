@@ -17,6 +17,8 @@ model.save("artifacts/model.joblib")
 
 `feature_columns()` excludes `TransactionID`, `isFraud`, and the split time column `TransactionDT` by default. `build_preprocessor()` one-hot encodes categorical columns with at most 32 distinct values and frequency-encodes higher-cardinality columns (e.g. `card1`, `addr1`) so the feature matrix stays sparse and tractable; both encoders are fitted on training data only and unseen values map to 0 frequency.
 
+IEEE-CIS stores entity proxies (`card1`-`card6`, `addr1`, `addr2`, `D1`-`D15`, ...) as integer codes whose numeric order is meaningless. Treat them as categories with `as_categorical(df, cols)` (or `--categorical-codes` in `scripts/run_experiment.py`); on real data this markedly improves logistic regression over standardizing raw codes.
+
 ## GNN installation and protocol
 
 Install PyTorch for the installed NVIDIA driver/CUDA version first, then a matching PyG release; their official install matrix is authoritative. Install this package with `pip install -e '.[gnn]'`. `build_causal_bipartite_edges` returns edges whose `transaction_index` is the positional row of the time-sorted frame (it resets the index internally); build node features on the same `sort_values(...).reset_index(drop=True)` frame so indices align. It remains a building block: create separate train/validation/test graph snapshots and ensure no future graph information participates in messages. Record CUDA, PyTorch, PyG, driver versions, GPU RAM, batch size, sampling fanout, seed, and OOM adjustments.
