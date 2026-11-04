@@ -1,0 +1,31 @@
+"""Optional PyG GraphSAGE. Graphs must contain only entities observed at prediction time."""
+from __future__ import annotations
+
+def build_causal_bipartite_edges(frame, entity_cols, time_col="TransactionDT"):
+    """Return transaction--entity edge table; caller must construct each split without future rows.
+    Entity node IDs are namespaced by column to prevent collisions.
+
+    ``transaction_index`` is the POSITIONAL row index (0..n-1) of the returned
+    time-sorted frame, not the caller's original index. Build node features on
+    ``frame.sort_values(time_col).reset_index(drop=True)`` so edge indices line
+    up with the feature matrix.
+    """
+    import pandas as pd
+    ordered = frame.sort_values(time_col, kind="stable").reset_index(drop=True).copy()
+    rows=[]
+    for col in entity_cols:
+        if col in ordered:
+            for i, v in ordered[col].items():
+                if pd.notna(v): rows.append((i, f"{col}:{v}"))
+    return pd.DataFrame(rows, columns=["transaction_index", "entity_key"])
+
+def graphsage_model(in_channels, hidden_channels=64, out_channels=1):
+    try:
+        import torch.nn as nn
+        from torch_geometric.nn import SAGEConv
+    except ImportError as e: raise ImportError("Install PyTorch and PyG: pip install -e '.[gnn]'") from e
+    class GraphSAGE(nn.Module):
+        def __init__(self):
+            super().__init__(); self.c1=SAGEConv(in_channels, hidden_channels); self.c2=SAGEConv(hidden_channels, out_channels)
+        def forward(self, x, edge_index): return self.c2(self.c1(x, edge_index).relu(), edge_index)
+    return GraphSAGE()

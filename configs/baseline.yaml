@@ -1,0 +1,15 @@
+seed: 42
+data:
+  target: isFraud
+  time_column: TransactionDT
+  split: {train_fraction: 0.70, valid_fraction: 0.15}
+model:
+  kind: logistic # logistic or lightgbm (optional dependency)
+decision: {top_k: 500}
+gnn:
+  enabled: false
+  hidden_channels: 64
+  batch_size: 256
+  neighbors: [10, 5]
+  mixed_precision: true
+  # RTX 4070 Ti 12GB: begin with 128 if CUDA OOM occurs; keep graph on CPU and sample neighbors.
