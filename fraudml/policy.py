@@ -11,6 +11,8 @@ class RiskPolicy:
 
     `CHALLENGE` means ask for step-up verification or hold for an approved
     operational action. It is not a claim that the transaction is fraud.
+    Thresholds are illustrative score cutoffs. Class-weighted model scores
+    support ranking and require separate calibration before probability use.
     """
     version: str = "2026-11-04-v1"
     reviewer: str = "unassigned"

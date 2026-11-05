@@ -21,11 +21,13 @@ Score transactions, then apply the versioned policy managed by risk operations:
 
 ```bash
 fraudml predict --model artifacts/logistic.joblib --data data/demo.csv --out artifacts/scored.csv
-fraudml triage --data artifacts/scored.csv --policy configs/risk_policy.json --out artifacts/decisions.csv --review-queue artifacts/review_queue.csv
+fraudml triage --data artifacts/scored.csv --policy configs/risk_policy.json --out artifacts/decisions.csv --review-queue artifacts/review_queue.csv --review-budget 100
 fraudml review --case-id case-PASTE_ID_HERE --outcome confirmed_fraud --reviewer alice --note "Verified after investigation"
 ```
 
 The policy produces only `APPROVE`, `REVIEW`, or `CHALLENGE` decisions. `CHALLENGE` is a hold/step-up-verification recommendation, **not a fraud confirmation**. Only an investigator's `confirmed_fraud` review outcome is a confirmed label. Triage and review events are appended to `artifacts/audit.jsonl`; keep raw PII out of audit notes.
+
+The capacity mode above includes the highest-scored transactions regardless of their policy action, matching the experiment's Top-K selection. The supplied 0.45 and 0.85 score cutoffs illustrate routing. Model outputs are uncalibrated ranking scores. See `docs/policy_workflow.md`.
 
 For LightGBM: `pip install -e '.[lightgbm,dev]'` and use `--model lightgbm`. The optional GNN requires a PyTorch/PyG build compatible with your CUDA driver; see [docs/usage.md](docs/usage.md).
 
@@ -53,5 +55,11 @@ The baseline uses time-contiguous splits, fits preprocessing only on training da
 ## Reproducibility
 
 Set a seed, save the exact config/environment and model artifact per run. Report PR-AUC and capacity-constrained Recall@K/Precision@K along with random and amount-ranking baselines. See `docs/experiments.md`.
+
+## Recorded results and local service
+
+The four small JSON reports in `artifacts/` are versioned. Run `python scripts/verify_results.py` after cloning to check their numerical consistency without downloading data. Full retraining requires your own IEEE-CIS download and the commands in `docs/experiments.md`. The written analysis is in `docs/final_report.md`.
+
+Run `python -m fraudml.service --model artifacts/final_metrics_models/lightgbm_seed42.joblib` for the local HTTP scorer. `examples/java/FraudClient.java` demonstrates a Java backend calling it. Run `python scripts/smoke_service.py` with JDK 11+ available to reproduce a synthetic Java-to-Python check. See `docs/serving.md`. Local integration has been verified. Production hosting and bank-system deployment require additional work.
 
 Models saved by the experiment script remember their category and history settings. For batch scoring, `fraudml predict` derives history from earlier rows in the scoring CSV. Supply `--history earlier_transactions.csv` when that CSV starts after the available history. All rows in the history file must precede the scoring batch. Use `--identity` and `--history-identity` for the corresponding identity joins if those features were used during training.

@@ -1,6 +1,9 @@
 # Policy-driven, human-in-the-loop review workflow
 
-This extension separates three things which should not be conflated:
+Model scores support transaction ranking. Class-weighted classifier scores
+require separate calibration before use as fraud-probability estimates.
+The example score thresholds are illustrative and should be selected using
+validation data and the resulting review volume.
 
 | Stage | Decision | Meaning |
 |---|---|---|
@@ -13,7 +16,7 @@ This extension separates three things which should not be conflated:
 
 1. A policy owner changes thresholds, high-value markers, or explicit blocked entity values in `configs/risk_policy.json`.
 2. The owner increments `version`, documents the reason, receives the required approval, and tests the policy on a held-out/sandbox batch.
-3. Triage writes decisions, a risk-sorted `REVIEW` queue, and a policy-versioned audit event.
+3. Triage writes decisions, a risk-sorted queue, and a policy-versioned audit event. The default queue contains `REVIEW` decisions. With `--review-budget K`, the queue contains exactly K highest-scored transactions across the batch.
 4. An investigator records an outcome with the `review` command. Never infer confirmed fraud simply from `CHALLENGE`.
 5. Periodically monitor review volume, confirmed-fraud rate, false positives, latency, and disparate impact where lawful/appropriate. Roll back harmful policy versions.
 
@@ -21,8 +24,27 @@ This extension separates three things which should not be conflated:
 
 ```powershell
 fraudml policy-init --out configs\risk_policy.json --reviewer risk-ops-owner
-fraudml triage --data artifacts\scored.csv --policy configs\risk_policy.json --out artifacts\decisions.csv --review-queue artifacts\review_queue.csv
+fraudml triage --data artifacts\scored.csv --policy configs\risk_policy.json --review-budget 500 --out artifacts\decisions.csv --review-queue artifacts\review_queue.csv
 fraudml review --case-id case-abc123 --outcome confirmed_fraud --reviewer reviewer-01 --note "Investigation reference stored in case system"
 ```
 
 For production, replace local JSON/CSV/JSONL with authenticated policy storage, role-based access, encrypted audit retention, a case-management UI, dual approval, monitoring, and an approved action service. Do not expose raw personal or payment data in prompts, audit notes, or logs.
+
+## Fixed-capacity investigation
+
+Budget mode includes high-scoring `CHALLENGE` cases. It can also select
+`APPROVE` cases when K extends below the review threshold.
+`review_selected` and `review_rank` record review selection independently
+of the policy decision. The decision column retains its rule and threshold
+result so operational actions remain traceable. An investigator records the
+subsequent outcome through the `review` command.
+
+The budget applies to the complete input CSV. Supply one day's transactions
+for a daily budget, or the holdout batch used by the experiment for its batch
+budget. K must be between 1 and the number of input rows. Equal scores retain
+input order. The experimental queue and demo queue match when they use the
+same rows, scores, K, and row order.
+
+The queue CSV contains exactly 500 rows in the example above. Audit events
+record queue mode, requested budget, selected count, policy version, and
+subsequent reviewer outcomes. Use default threshold mode for an empty batch.

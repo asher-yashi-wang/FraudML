@@ -1,0 +1,112 @@
+{
+  "evaluation_split": "test",
+  "review_budgets": [
+    100,
+    500
+  ],
+  "seed": 42,
+  "transaction_file": "data/ieee-cis/train_transaction.csv",
+  "identity_file": null,
+  "entity_cols": [],
+  "categorical_codes": [
+    "card1",
+    "addr1"
+  ],
+  "split": {
+    "train_fraction": 0.7,
+    "valid_fraction": 0.15,
+    "periods": {
+      "train": {
+        "rows": 413378,
+        "start_dt": 86400,
+        "end_dt": 10437996
+      },
+      "validation": {
+        "rows": 88581,
+        "start_dt": 10438003,
+        "end_dt": 13151840
+      },
+      "test": {
+        "rows": 88581,
+        "start_dt": 13151880,
+        "end_dt": 15811131
+      }
+    }
+  },
+  "evaluation_fraud_count": 3083,
+  "evaluation_fraud_rate": 0.03480430340592226,
+  "model_artifacts": {
+    "logistic": "final_metrics_models/logistic_seed42.joblib",
+    "lightgbm": "final_metrics_models/lightgbm_seed42.joblib"
+  },
+  "results": {
+    "random": {
+      "k=100": {
+        "pr_auc": 0.035292215498248805,
+        "k": 100,
+        "precision_at_k": 0.01,
+        "recall_at_k": 0.0003243593902043464,
+        "hits_at_k": 1
+      },
+      "k=500": {
+        "pr_auc": 0.035292215498248805,
+        "k": 500,
+        "precision_at_k": 0.026,
+        "recall_at_k": 0.0042166720726565035,
+        "hits_at_k": 13
+      },
+      "runtime_seconds": 0.025
+    },
+    "amount_descending": {
+      "k=100": {
+        "pr_auc": 0.03712227931551147,
+        "k": 100,
+        "precision_at_k": 0.02,
+        "recall_at_k": 0.0006487187804086928,
+        "hits_at_k": 2
+      },
+      "k=500": {
+        "pr_auc": 0.03712227931551147,
+        "k": 500,
+        "precision_at_k": 0.02,
+        "recall_at_k": 0.003243593902043464,
+        "hits_at_k": 10
+      },
+      "runtime_seconds": 0.014
+    },
+    "logistic": {
+      "k=100": {
+        "pr_auc": 0.17685066345854383,
+        "k": 100,
+        "precision_at_k": 0.06,
+        "recall_at_k": 0.0019461563412260785,
+        "hits_at_k": 6
+      },
+      "k=500": {
+        "pr_auc": 0.17685066345854383,
+        "k": 500,
+        "precision_at_k": 0.012,
+        "recall_at_k": 0.0019461563412260785,
+        "hits_at_k": 6
+      },
+      "runtime_seconds": 117.588
+    },
+    "lightgbm": {
+      "k=100": {
+        "pr_auc": 0.4995729842760615,
+        "k": 100,
+        "precision_at_k": 0.95,
+        "recall_at_k": 0.03081414206941291,
+        "hits_at_k": 95
+      },
+      "k=500": {
+        "pr_auc": 0.4995729842760615,
+        "k": 500,
+        "precision_at_k": 0.93,
+        "recall_at_k": 0.1508271164450211,
+        "hits_at_k": 465
+      },
+      "runtime_seconds": 20.724
+    }
+  }
+}

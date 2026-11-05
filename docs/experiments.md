@@ -28,10 +28,10 @@ Test period: 88,581 transactions, 3,083 fraud cases, fraud rate 3.48%, Transacti
 | Model | AP | Precision@500 | Recall@500 | fraud found | Notes |
 |---|---:|---:|---:|---:|---|
 | Random ranking | 0.0353 | 0.026 | 0.0042 | 13 | close to fraud rate × 500 ≈ 17.4 |
-| Amount descending | 0.0371 | 0.020 | 0.0032 | 10 | no better than random; fraud amounts are not large |
+| Amount descending | 0.0371 | 0.020 | 0.0032 | 10 | weaker than the single seeded random ranking at K=500 |
 | Logistic Regression | 0.1769 | 0.012 | 0.0019 | 6 | scores saturate at 1.0 under temporal covariate shift; see error analysis |
 | LightGBM | 0.4996 | 0.930 | 0.1508 | 465 | 46.5× the fraud found by amount ranking |
-| LightGBM + history | 0.4974 | 0.912 | 0.1479 | 456 | strictly-past card1/addr1 statistics add nothing |
+| LightGBM + history | 0.4974 | 0.912 | 0.1479 | 456 | 9 fewer hits at K=500 and 2 more at K=100 |
 
 ### K = 100 (sensitivity)
 
@@ -57,12 +57,16 @@ Test period: 88,581 transactions, 3,083 fraud cases, fraud rate 3.48%, Transacti
 
 - 918 test transactions receive probability exactly 1.0; their fraud rate is 2.18%.
 - 196 near-saturated rows (0.999999–1.0) have a 47.5% fraud rate but sort below the exact-1.0 group, so the Top-500 queue misses them entirely (6 frauds in Top-500).
-- Cause: temporal covariate shift. Anonymized features V322, V101, V324, V95, V177, V323, V293, V103 reach max |z| of 820–1,829 on the test period versus 19–67 during training. Linear extrapolation saturates the sigmoid, and ties in the queue are then broken by transaction order.
-- LightGBM is unaffected: test AP 0.4996 versus validation 0.5231. Tree splits are invariant to monotone feature drift.
-- Practical takeaway: a linear model used for capacity-constrained ranking needs drift monitoring and recalibration; the tree model transfers across time.
+- Reported feature diagnostics suggest temporal covariate shift and sigmoid saturation. These per-row diagnostics are exploratory observations and are not contained in the four committed aggregate metric reports. A follow-up should save the diagnostics and compare ranking by LR's unsquashed decision function. Stable ties follow input order.
+- LightGBM retained similar ranking performance on this split, with test AP 0.4996 versus validation AP 0.5231. Trees can also deteriorate under changing distributions.
+- A monotone transformation of already tied probabilities cannot restore their lost ordering. The original six-hit result remains the reported LR outcome.
 
 ## Historical-feature ablation
 
-Adding strictly-past card1/addr1 statistics (transaction count and mean amount, computed only from strictly earlier timestamps) changes LightGBM's AP by −0.0022 on the test period (+0.0006 on validation) and finds 9 fewer frauds at K = 500. Conclusion: once card1/addr1 are used as categorical features, strictly-past aggregates provide no additional ranking value. Reported as a negative result; both runs are documented in `artifacts/final_metrics.json` and `artifacts/final_history_metrics.json`.
+Adding strictly-past card1/addr1 statistics changes LightGBM's AP by about -0.0021 on test (+0.0006 on validation), finds 9 fewer frauds at K=500, and finds 2 more at K=100. These features did not provide consistent gains across the measured budgets and periods. Both runs are recorded in `artifacts/final_metrics.json` and `artifacts/final_history_metrics.json`.
 
 Source files for every number above: `artifacts/validation_base.json`, `artifacts/validation_history.json`, `artifacts/final_metrics.json`, `artifacts/final_history_metrics.json`.
+
+The metric values and arithmetic can be checked after cloning with `python scripts/verify_results.py`. See `docs/reproducibility.md` for retraining commands and environment limitations. The final analysis is in `docs/final_report.md`.
+
+This study uses a single seed and one holdout, with default baseline model settings, no systematic tuning and no confidence intervals. Queue evaluation assumes a known complete batch. The operational demonstration uses `triage --review-budget K` for the same selection rule, with policy actions recorded separately. Balanced-class outputs are uncalibrated scores. The example policy thresholds have no validated probability interpretation.

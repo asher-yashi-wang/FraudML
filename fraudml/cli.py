@@ -20,6 +20,7 @@ def main():
  q.add_argument("--history-identity", help="optional identity CSV for earlier transactions")
  p0=sub.add_parser("policy-init", help="write an editable starter policy"); p0.add_argument("--out",default="configs/risk_policy.json"); p0.add_argument("--reviewer",default="risk-operations-owner")
  x=sub.add_parser("triage", help="apply approved policy to scored transactions"); x.add_argument("--data",required=True); x.add_argument("--policy",default="configs/risk_policy.json"); x.add_argument("--out",required=True); x.add_argument("--review-queue",required=True); x.add_argument("--audit",default="artifacts/audit.jsonl")
+ x.add_argument("--review-budget", type=int, help="select exactly K highest-scored rows across all policy decisions")
  r=sub.add_parser("review", help="record an investigator's outcome in the audit log"); r.add_argument("--case-id",required=True); r.add_argument("--outcome",choices=["confirmed_fraud","not_fraud","needs_more_information"],required=True); r.add_argument("--reviewer",required=True); r.add_argument("--note",default=""); r.add_argument("--audit",default="artifacts/audit.jsonl")
  a=p.parse_args()
  if a.command=="make-demo":
@@ -62,6 +63,23 @@ def main():
   df.to_csv(a.out, index=False)
  if a.command=="policy-init": RiskPolicy(reviewer=a.reviewer).save(a.out)
  if a.command=="triage":
-  policy=RiskPolicy.load(a.policy); decisions=triage(pd.read_csv(a.data), policy); Path(a.out).parent.mkdir(parents=True,exist_ok=True); Path(a.review_queue).parent.mkdir(parents=True,exist_ok=True); decisions.to_csv(a.out,index=False); review_queue(decisions).to_csv(a.review_queue,index=False); append_audit(a.audit,{"event":"triage_completed","policy_version":policy.version,"reviewer":policy.reviewer,"total":len(decisions),"review_cases":int((decisions.decision=="REVIEW").sum()),"challenge_cases":int((decisions.decision=="CHALLENGE").sum())})
+  policy = RiskPolicy.load(a.policy)
+  decisions = triage(pd.read_csv(a.data), policy, review_budget=a.review_budget)
+  queue = review_queue(decisions)
+  Path(a.out).parent.mkdir(parents=True, exist_ok=True)
+  Path(a.review_queue).parent.mkdir(parents=True, exist_ok=True)
+  decisions.to_csv(a.out, index=False)
+  queue.to_csv(a.review_queue, index=False)
+  append_audit(a.audit, {
+   "event": "triage_completed",
+   "policy_version": policy.version,
+   "reviewer": policy.reviewer,
+   "total": len(decisions),
+   "review_cases": int((decisions.decision == "REVIEW").sum()),
+   "challenge_cases": int((decisions.decision == "CHALLENGE").sum()),
+   "queue_mode": "top_k" if a.review_budget is not None else "threshold",
+   "review_budget": a.review_budget,
+   "selected_for_review": len(queue),
+  })
  if a.command=="review": record_review(a.audit,a.case_id,a.outcome,a.reviewer,a.note)
 if __name__ == "__main__": main()

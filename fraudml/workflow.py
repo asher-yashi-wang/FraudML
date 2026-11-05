@@ -21,17 +21,25 @@ def _case_ids(frame: pd.DataFrame, policy: RiskPolicy, transaction_id_col="Trans
     return pd.Series("case-" + joined.map(lambda s: hashlib.sha256(s.encode()).hexdigest()[:12]),
                      index=frame.index)
 
-def triage(frame: pd.DataFrame, policy: RiskPolicy, score_col="risk_score", amount_col="TransactionAmt") -> pd.DataFrame:
+def triage(frame: pd.DataFrame, policy: RiskPolicy, score_col="risk_score",
+           amount_col="TransactionAmt", review_budget: int | None = None) -> pd.DataFrame:
     """Assign an operational decision and reasons; never assign a fraud label.
 
-    Vectorized: decision logic is evaluated column-wise instead of row-by-row,
-    so it scales to the full dataset. Blocked values and score thresholds
-    produce the same decisions and reason text as the earlier row loop.
+    A review budget selects exactly K rows by descending score regardless of
+    the policy decision. Ties preserve input order, matching Top-K metrics.
+    Without a budget, retain the threshold-based REVIEW queue.
     """
     if score_col not in frame: raise KeyError(f"Missing model score column: {score_col}")
     policy.validate(); out = frame.copy()
     scores = pd.to_numeric(out[score_col], errors="coerce")
-    if scores.isna().any(): raise ValueError("risk_score contains missing values")
+    if not scores.between(0, 1).all():
+        raise ValueError("risk_score must contain finite numeric values between 0 and 1")
+    if review_budget is not None:
+        if isinstance(review_budget, bool) or not isinstance(review_budget, int):
+            raise ValueError("review_budget must be an integer")
+        if not 1 <= review_budget <= len(out):
+            raise ValueError("review_budget must be between 1 and the number of transactions")
+    out[score_col] = scores
 
     high_score = scores >= policy.challenge_threshold
     review_score = ~high_score & (scores >= policy.review_threshold)
@@ -70,11 +78,30 @@ def triage(frame: pd.DataFrame, policy: RiskPolicy, score_col="risk_score", amou
     out["decision_reason"] = reasons
     out["policy_version"] = policy.version
     out["review_case_id"] = _case_ids(out, policy)
+    # Positional ranks preserve input row order and non-default indexes.
+    ranking = scores.reset_index(drop=True).sort_values(ascending=False, kind="stable").index
+    selected = (out["decision"] == "REVIEW").to_numpy()
+    if review_budget is not None:
+        selected[:] = False
+        selected[ranking[:review_budget]] = True
+    rank = pd.array([pd.NA] * len(out), dtype="Int64")
+    selected_order = [position for position in ranking if selected[position]]
+    rank[selected_order] = range(1, len(selected_order) + 1)
+    out["review_selected"] = selected
+    out["review_rank"] = rank
     return out
 
 def review_queue(triaged: pd.DataFrame) -> pd.DataFrame:
-    """Only uncertain cases enter the manual review queue."""
-    return triaged.loc[triaged["decision"] == "REVIEW"].sort_values("risk_score", ascending=False, kind="stable").copy()
+    """Return selected cases; accept older threshold-only triage outputs."""
+    if "review_selected" in triaged:
+        selected = triaged["review_selected"]
+        if selected.dtype != bool:
+            selected = selected.astype(str).str.lower().map({"true": True, "false": False})
+            if selected.isna().any():
+                raise ValueError("review_selected must contain only booleans")
+    else:
+        selected = triaged["decision"] == "REVIEW"
+    return triaged.loc[selected].sort_values("risk_score", ascending=False, kind="stable").copy()
 
 def append_audit(path: str | Path, event: dict[str, Any]) -> None:
     """Append-only JSONL audit record; do not write raw personally identifying fields."""

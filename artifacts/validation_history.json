@@ -1,0 +1,63 @@
+{
+  "evaluation_split": "validation",
+  "review_budgets": [
+    100,
+    500
+  ],
+  "seed": 42,
+  "transaction_file": "data/ieee-cis/train_transaction.csv",
+  "identity_file": null,
+  "entity_cols": [
+    "card1",
+    "addr1"
+  ],
+  "categorical_codes": [
+    "card1",
+    "addr1"
+  ],
+  "split": {
+    "train_fraction": 0.7,
+    "valid_fraction": 0.15,
+    "periods": {
+      "train": {
+        "rows": 413378,
+        "start_dt": 86400,
+        "end_dt": 10437996
+      },
+      "validation": {
+        "rows": 88581,
+        "start_dt": 10438003,
+        "end_dt": 13151840
+      },
+      "test": {
+        "rows": 88581,
+        "start_dt": 13151880,
+        "end_dt": 15811131
+      }
+    }
+  },
+  "evaluation_fraud_count": 3042,
+  "evaluation_fraud_rate": 0.03434145019812375,
+  "model_artifacts": {
+    "lightgbm": "validation_history_models/lightgbm_seed42.joblib"
+  },
+  "results": {
+    "lightgbm": {
+      "k=100": {
+        "pr_auc": 0.5237234404138624,
+        "k": 100,
+        "precision_at_k": 0.98,
+        "recall_at_k": 0.032215647600262985,
+        "hits_at_k": 98
+      },
+      "k=500": {
+        "pr_auc": 0.5237234404138624,
+        "k": 500,
+        "precision_at_k": 0.946,
+        "recall_at_k": 0.15548980933596318,
+        "hits_at_k": 473
+      },
+      "runtime_seconds": 21.651
+    }
+  }
+}

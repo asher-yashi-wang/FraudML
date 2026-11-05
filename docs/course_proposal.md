@@ -1,7 +1,7 @@
 # Project Proposal — FraudML: Leakage-Aware Fraud Detection and Investigation Prioritization
 
 **Course:** DSC5001<br>
-**Team:** [Add each team member's name and SID]<br>
+**Team:** 王雅仕, 李熠辉, 王时弘, 吴嘉琦, 陈斯图<br>
 **Due date:** 25 November 2026
 
 ## Motivation and question

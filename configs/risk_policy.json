@@ -7,5 +7,5 @@
   "blocked_values": {
     "DeviceInfo": []
   },
-  "notes": "Example only. Approve, version, test, and monitor any production policy change."
+  "notes": "Illustrative score thresholds. Balanced-class models return uncalibrated ranking scores. Use --review-budget for the evaluated Top-K workflow. Validate score cutoffs on validation data for a specified action before operational use."
 }

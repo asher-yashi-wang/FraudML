@@ -4,7 +4,13 @@ __pycache__/
 .pytest_cache/
 .DS_Store
 *.egg-info/
-artifacts/
+artifacts/*
+!artifacts/validation_base.json
+!artifacts/validation_history.json
+!artifacts/final_metrics.json
+!artifacts/final_history_metrics.json
 data/*.csv
 data/ieee-cis/
 *.joblib
+work/
+*.class
