@@ -36,6 +36,7 @@ class ScoringApplication:
         if max_rows < 1:
             raise ValueError("max_rows must be positive")
         path = Path(model_path)
+        # 用模型文件的 SHA-256 标识此次推理所用的产物，便于排查和复现。
         digest = hashlib.sha256()
         with path.open("rb") as artifact:
             for chunk in iter(lambda: artifact.read(1024 * 1024), b""):
@@ -43,6 +44,7 @@ class ScoringApplication:
         self.model_version = f"sha256:{digest.hexdigest()}"
         self.model = TabularFraudModel.load(path)
         self.max_rows = max_rows
+        # 从已拟合的模型读取字段名和类型，避免在线服务另写一份字段清单。
         self.columns = list(self.model.pipeline.feature_names_in_)
         preprocessor = self.model.pipeline.named_steps["preprocess"]
         self.numeric_columns = []
@@ -74,6 +76,7 @@ class ScoringApplication:
             raise RequestError(f"transactions must contain 1..{self.max_rows} objects")
         if "features_prepared" in payload and not isinstance(payload["features_prepared"], bool):
             raise RequestError("features_prepared must be a boolean")
+        # 历史字段由上游按交易时点计算。这里能检查字段和类型，无法验证统计窗口是否严格早于该交易。
         if self.history_required and payload.get("features_prepared") is not True:
             raise RequestError("history model requires prepared causal features and features_prepared=true")
 
@@ -102,6 +105,7 @@ class ScoringApplication:
                 elif not isinstance(value, str):
                     raise RequestError("categorical model features must be strings or null")
 
+        # 按训练列对齐输入，忽略额外字段，保留请求中的交易顺序。
         frame = pd.DataFrame(transactions).reindex(columns=self.columns)
         # Null numerics must stay numeric even if every row is missing.
         for column in self.numeric_columns:
@@ -109,11 +113,13 @@ class ScoringApplication:
         if self.categorical_codes:
             frame = as_categorical(frame, list(self.categorical_codes))
         frame = frame.where(pd.notna(frame), np.nan)
+        # 复用已拟合的转换和分类器。调用方仍需按训练口径准备特征值。
         scores = np.asarray(self.model.predict_proba(frame), dtype=float)
         if scores.shape != (len(frame),) or not np.all(np.isfinite(scores)):
             raise RuntimeError("model returned invalid scores")
         if np.any((scores < 0) | (scores > 1)):
             raise RuntimeError("model scores outside supported range")
+        # 分数用于排序。策略动作由调用方决定，调查结论由审核员记录。
         return {
             "model_version": self.model_version,
             "score_type": "uncalibrated_model_score",

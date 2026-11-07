@@ -13,8 +13,10 @@ def build_causal_bipartite_edges(frame, entity_cols, time_col="TransactionDT"):
     history snapshot plus the target transaction when scoring a target.
     """
     import pandas as pd
+    # 排序后重置索引，让边引用局部节点行号。调用方需用相同顺序构造节点特征。
     ordered = frame.sort_values(time_col, kind="stable").reset_index(drop=True).copy()
     rows=[]
+    # 实体键带列名前缀，避免两个字段恰好用了相同编码而连成同一节点。
     for col in entity_cols:
         if col in ordered:
             for i, v in ordered[col].items():

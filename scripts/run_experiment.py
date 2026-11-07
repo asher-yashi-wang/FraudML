@@ -9,6 +9,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from time import perf_counter
 
+# 直接运行这个脚本时，也能从项目根目录导入 fraudml。
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from fraudml.data import (
@@ -38,6 +39,7 @@ def main() -> int:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--train-fraction", type=float, default=0.70)
     parser.add_argument("--valid-fraction", type=float, default=0.15)
+    # 先用验证期比较配置，固定实验方案后再显式评估测试期。
     parser.add_argument("--split", choices=("validation", "test"), default="validation",
                         help="use test after freezing the experiment settings")
     parser.add_argument("--out", type=Path, help="use a distinct JSON filename for each run")
@@ -46,6 +48,7 @@ def main() -> int:
     default_report = "validation_metrics.json" if args.split == "validation" else "final_metrics.json"
     report_path = args.out or Path("artifacts") / default_report
     models_path = report_path.with_name(f"{report_path.stem}_models")
+    # 每次实验使用单独的报告和模型目录，方便追溯配置和结果。
     if report_path.exists() or models_path.exists():
         parser.error(f"report or model directory already exists; choose another --out: {report_path}")
 
@@ -57,8 +60,7 @@ def main() -> int:
     if args.categorical_codes:
         frame = as_categorical(frame, args.categorical_codes)
     if args.entity_cols:
-        # Earlier observations, including earlier rows of the evaluation period,
-        # are available at scoring time. The aggregates never use labels.
+        # 模拟逐笔评分，只汇总严格早于当前交易的输入，包括评估期内较早的记录。
         frame = add_past_entity_stats(frame, args.entity_cols)
     split = chronological_split(frame, train_fraction=args.train_fraction,
                                 valid_fraction=args.valid_fraction)
@@ -70,6 +72,7 @@ def main() -> int:
     scored_period = periods[args.split]
     y = scored_period["isFraud"]
     X = scored_period[cols]
+    # K 是整个评估批次的审核名额。保留首次出现的有效预算。
     budgets = list(dict.fromkeys(k for k in args.k if 1 <= k <= len(X)))
     invalid_budgets = [k for k in args.k if not 1 <= k <= len(X)]
     if invalid_budgets:
@@ -93,10 +96,12 @@ def main() -> int:
             else:
                 model = TabularFraudModel(kind, random_state=args.seed)
                 try:
+                    # 预处理和模型都只在训练期拟合，选定的评估期只用于评分和算指标。
                     model.fit(split.train[cols], split.train["isFraud"])
                 except ImportError as error:
                     parser.error(f"could not train {kind}: {error}")
                 scores = model.predict_proba(X)
+                # 保存特征配置，批量预测时可按训练口径处理类别与历史统计。
                 model.entity_cols = tuple(args.entity_cols)
                 model.categorical_codes = tuple(args.categorical_codes)
                 staged_models.mkdir(exist_ok=True)
@@ -108,6 +113,7 @@ def main() -> int:
                 "runtime_seconds": round(perf_counter() - started, 3),
             }
 
+        # 报告记录输入、时间边界、种子、指标与模型路径，便于复查和复跑。
         payload = {
             "evaluation_split": args.split,
             "review_budgets": budgets,

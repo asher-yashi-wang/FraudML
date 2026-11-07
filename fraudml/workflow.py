@@ -41,6 +41,7 @@ def triage(frame: pd.DataFrame, policy: RiskPolicy, score_col="risk_score",
             raise ValueError("review_budget must be between 1 and the number of transactions")
     out[score_col] = scores
 
+    # 分数未经概率校准。示例阈值用于将交易分流到放行、人工审核或追加验证。
     high_score = scores >= policy.challenge_threshold
     review_score = ~high_score & (scores >= policy.review_threshold)
     approve = ~high_score & ~review_score
@@ -53,6 +54,7 @@ def triage(frame: pd.DataFrame, policy: RiskPolicy, score_col="risk_score",
         blocked |= hit
         parts.append((hit, f"policy blocked value: {column}"))
 
+    # 命中名单时优先触发追加验证，欺诈结论要等后续调查。
     decisions = pd.Series("", index=out.index, dtype="object")
     decisions[blocked] = "CHALLENGE"
     decisions[~blocked & high_score] = "CHALLENGE"
@@ -78,10 +80,11 @@ def triage(frame: pd.DataFrame, policy: RiskPolicy, score_col="risk_score",
     out["decision_reason"] = reasons
     out["policy_version"] = policy.version
     out["review_case_id"] = _case_ids(out, policy)
-    # Positional ranks preserve input row order and non-default indexes.
+    # 按分数降序，同分保留输入顺序，与离线 Top-K 一致。用行位置回填，保留原表索引。
     ranking = scores.reset_index(drop=True).sort_values(ascending=False, kind="stable").index
     selected = (out["decision"] == "REVIEW").to_numpy()
     if review_budget is not None:
+        # 给定容量时从全批次取前 K 条，独立于策略动作，高分追加验证案件也能进队列。
         selected[:] = False
         selected[ranking[:review_budget]] = True
     rank = pd.array([pd.NA] * len(out), dtype="Int64")
@@ -112,4 +115,5 @@ def append_audit(path: str | Path, event: dict[str, Any]) -> None:
 def record_review(audit_path: str | Path, case_id: str, outcome: str, reviewer: str, note="") -> None:
     if outcome not in OUTCOMES: raise ValueError(f"outcome must be one of {sorted(OUTCOMES)}")
     if not reviewer.strip(): raise ValueError("reviewer is required")
+    # 按案件 ID 追加调查结论，保留评分和处置当时的记录以供追溯。
     append_audit(audit_path, {"event": "review_completed", "review_case_id": case_id, "outcome": outcome, "reviewer": reviewer, "note": note})

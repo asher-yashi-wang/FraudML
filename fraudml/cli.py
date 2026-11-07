@@ -26,6 +26,7 @@ def main():
  if a.command=="make-demo":
   Path(a.out).parent.mkdir(parents=True,exist_ok=True); make_synthetic_transactions(a.rows).to_csv(a.out,index=False); return
  if a.command=="train":
+  # 日常训练只打印验证期指标。最终测试由 run_experiment.py 按冻结后的配置执行。
   df=pd.read_csv(a.data); split=chronological_split(df); cols=feature_columns(df); m=TabularFraudModel(a.model).fit(split.train[cols],split.train.isFraud); m.save(Path(a.out)); print(json.dumps({"split":"validation","note":"holdout test split is reserved; tune on validation and run scripts/run_experiment.py once for final numbers","metrics":evaluate(split.valid.isFraud,m.predict_proba(split.valid[cols]),min(a.k,len(split.valid)))},indent=2)); return
  if a.command=="predict":
   model = TabularFraudModel.load(a.model)
@@ -45,6 +46,7 @@ def main():
     history = load_ieee_cis(a.history, a.history_identity)
     validate_feature_config(history, entity_cols, categorical_codes)
     validate_timestamps(history)
+    # 单独提供的历史批次必须早于所有待评分交易，才能在聚合后只取末尾的待评分行。
     if history["TransactionDT"].max() >= df["TransactionDT"].min():
      p.error("--history must contain only transactions strictly earlier than the scoring batch")
     features = pd.concat([history, df], ignore_index=True, sort=False)
@@ -58,12 +60,14 @@ def main():
   if missing:
    p.error(f"model requires missing columns: {sorted(missing)}")
   scores = model.predict_proba(features[list(expected)])
+  # 历史聚合按时间重新排序。写回 CSV 时按原行号对齐，确保分数对应正确的交易。
   df["risk_score"] = scores if score_order is None else pd.Series(scores, index=score_order).reindex(df.index)
   Path(a.out).parent.mkdir(parents=True, exist_ok=True)
   df.to_csv(a.out, index=False)
  if a.command=="policy-init": RiskPolicy(reviewer=a.reviewer).save(a.out)
  if a.command=="triage":
   policy = RiskPolicy.load(a.policy)
+  # 处置表记录每笔交易的策略动作，审核队列只保留选中调查的交易。
   decisions = triage(pd.read_csv(a.data), policy, review_budget=a.review_budget)
   queue = review_queue(decisions)
   Path(a.out).parent.mkdir(parents=True, exist_ok=True)

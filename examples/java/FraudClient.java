@@ -27,6 +27,7 @@ public final class FraudClient {
         HttpClient client = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(2))
                 .build();
+        // Each entry in transactions is one payment. GET /health lists the required features and types.
         HttpRequest request = HttpRequest.newBuilder(base.resolve("/score"))
                 .timeout(Duration.ofSeconds(5))
                 .header("Content-Type", "application/json")
@@ -36,12 +37,12 @@ public final class FraudClient {
                 .build();
         HttpResponse<String> response = client.send(
                 request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+        // A timeout throws an exception. An HTTP error exits so the caller can handle the failure.
         if (response.statusCode() != 200) {
             System.err.println("Scoring failed with HTTP " + response.statusCode());
             System.exit(1);
         }
-        // Demonstration output. A payment backend should parse the response with
-        // its existing JSON library and pass the score to its policy workflow.
+        // The response includes model_version and scores in request order for the caller's risk policy.
         System.out.println(response.body());
     }
 }
